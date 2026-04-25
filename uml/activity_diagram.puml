@@ -1,0 +1,195 @@
+@startuml activity_diagram
+skinparam backgroundColor #FAFAFA
+skinparam activity {
+    BackgroundColor White
+    BorderColor #444
+    ArrowColor #333
+}
+skinparam partition {
+    BackgroundColor #EEF4FF
+    BorderColor #5588CC
+}
+skinparam diamond {
+    BackgroundColor #FFF8CC
+    BorderColor #CC9900
+}
+skinparam note {
+    BackgroundColor #FFFDE0
+    BorderColor #CCAA00
+}
+
+title "Dungeon RPG AI — Activity Diagram\nCombat Flow + Minimax Alpha-Beta Search"
+
+|Game Orchestration|
+start
+
+:Initialize CombatantState (Player, Enemy);
+:Initialize ReputationSystem;
+:Initialize PatternAnalyzer;
+
+if (track_metrics?) then (yes)
+    :Create OptimizationMetrics;
+else (no)
+    :metrics = None;
+endif
+
+:Print combat header and game rules;
+
+' ─── Main Combat Loop ───────────────────────────────
+while (player.is_alive() AND enemy.is_alive()) is (yes)
+
+    :Display turn number, HP/Stamina bars,\nReputation summary;
+
+    ' ─── Player Turn ───
+    partition "Player Turn" {
+        if (player_controlled?) then (yes)
+            :Display available actions\nwith stamina costs and [NOT ENOUGH] flags;
+            :get_player_action() — read integer 1–4 from stdin;
+            note right
+                Input validation loop:
+                Re-prompt on invalid input
+                or insufficient stamina.
+            end note
+        else (no / auto-simulate)
+            :Compute weighted probabilities\nover available actions;
+            note right
+                Weights:
+                Heavy +3 if HP > 40
+                Defend +4 if HP < 30
+                Rest   +5 if stamina < 3
+                else   +2 default
+            end note
+            :random.choices(ACTIONS, weights) → p_action;
+        endif
+
+        :reputation.record_action(p_action, actor="player");
+        note right: Updates Aggressive/Defensive/Good/Evil counters
+
+        :simulate_turn(player, enemy, p_action)\n→ clone both states, apply stamina cost,\n   compute damage, update HP;
+        :Log action description to combat output;
+    }
+
+    if (enemy.is_alive()?) then (no)
+        break
+    endif
+
+    ' ─── Enemy AI Turn ───
+    partition "Enemy AI Turn" {
+        :ai_choose_action(enemy, player, reputation,\n   depth=3, metrics, pattern_analyzer);
+
+        ' ─── Minimax Alpha-Beta Search ───
+        partition "minimax() — Recursive Alpha-Beta Search" {
+
+            if (depth == 0 OR\nenemy dead OR player dead?) then (yes — terminal)
+
+                |Heuristic Evaluation|
+                :Compute hp_score:\n(enemy.hp/max_hp − player.hp/max_hp) × 100;
+                :Compute st_score:\n(enemy.stamina/max − player.stamina/max) × 20;
+                :reputation.aggression_ratio() → rep_modifier (±10);
+
+                if (PatternAnalyzer provided AND history ≥ 3?) then (yes)
+                    :detect_repeating_pattern(last 3) → +15.0 bonus;
+                    :predictability_score() → entropy-based bonus;
+                    :detect_cyclic_pattern() → +10 × predictability;
+                else (no)
+                    :Simple repeating pattern check only;
+                endif
+
+                if (enemy.stamina < 2?) then (yes)
+                    :stamina_penalty = −30;
+                else (no)
+                    :stamina_penalty = 0;
+                endif
+
+                :return heuristic score\n= hp_score + st_score + rep_modifier\n  + pattern_bonus + stamina_penalty;
+                |Game Orchestration|
+
+            else (no — recurse)
+
+                if (maximising? — Enemy turn) then (yes)
+                    :max_val = −∞, best_action = None;
+                    :actions = available_actions(enemy);
+
+                    repeat
+                        :action = next enemy action;
+                        :new_enemy, new_player = simulate_turn(clone);
+                        :score, _ = minimax(new_enemy, new_player,\n   depth−1, alpha, beta, maximising=False);
+
+                        if (metrics provided?) then (yes)
+                            :metrics.record_node(depth, pruned=False);
+                        endif
+
+                        if (score > max_val?) then (yes)
+                            :max_val = score;\nbest_action = action;
+                        endif
+
+                        :alpha = max(alpha, score);
+
+                        if (beta ≤ alpha?) then (yes — PRUNE)
+                            :Record remaining nodes as pruned\nin OptimizationMetrics;
+                            break
+                        endif
+
+                    repeat while (more actions?)
+
+                    :return (max_val, best_action);
+
+                else (no — minimising, Player turn)
+                    :min_val = +∞, best_action = None;
+                    :actions = available_actions(player);
+
+                    repeat
+                        :action = next player action;
+                        :new_player, new_enemy = simulate_turn(clone);
+                        :score, _ = minimax(new_enemy, new_player,\n   depth−1, alpha, beta, maximising=True);
+
+                        if (metrics provided?) then (yes)
+                            :metrics.record_node(depth, pruned=False);
+                        endif
+
+                        if (score < min_val?) then (yes)
+                            :min_val = score;\nbest_action = action;
+                        endif
+
+                        :beta = min(beta, score);
+
+                        if (beta ≤ alpha?) then (yes — PRUNE)
+                            :Record remaining nodes as pruned;
+                            break
+                        endif
+
+                    repeat while (more actions?)
+
+                    :return (min_val, best_action);
+                endif
+            endif
+        }
+
+        if (returned action == None OR\nenemy cannot afford action?) then (yes)
+            :e_action = "Rest"  ← fallback safety;
+        else (no)
+            :e_action = best action from minimax;
+        endif
+
+        :simulate_turn(enemy, player, e_action)\n→ clone, apply, return new states;
+        :Log enemy action and "(AI reasoning: chose X via Minimax α-β)";
+    }
+
+endwhile (no)
+
+' ─── Result ───
+if (player.is_alive()?) then (yes)
+    :Print VICTORY — Player defeated enemy;
+else (no)
+    :Print DEFEAT — Enemy wins;
+endif
+
+:Print final HP totals and turn count;
+
+if (track_metrics?) then (yes)
+    :Print OptimizationMetrics.summary()\n(nodes evaluated, pruned, efficiency %, depth distribution);
+endif
+
+stop
+
+@enduml

@@ -1,0 +1,170 @@
+@startuml class_diagram
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam class {
+    BackgroundColor White
+    BorderColor #444444
+    HeaderBackgroundColor #DDEEFF
+    ArrowColor #333333
+    FontSize 12
+}
+skinparam stereotypeCBackgroundColor #FFE8C0
+skinparam stereotypeABackgroundColor #C0FFD0
+
+title "Dungeon RPG AI — Class Diagram\n(AI2002 Part A & B)"
+
+' ─────────────────────────────────────
+' Core State Class
+' ─────────────────────────────────────
+class CombatantState {
+    + name : str
+    + hp : int
+    + max_hp : int
+    + stamina : int
+    + max_stamina : int
+    + is_boss : bool
+    + defending : bool
+    + action_history : List[str]
+    ==
+    + __init__(name: str, hp: int, max_hp: int,\n   stamina: int, max_stamina: int,\n   is_boss: bool = False) : None
+    + is_alive() : bool
+    + clone() : CombatantState
+    + status_line() : str
+}
+
+note right of CombatantState
+  <b>Immutable-by-convention</b>
+  clone() is mandatory before any
+  state mutation in the search tree.
+  O(n) clone where n = len(action_history)
+end note
+
+' ─────────────────────────────────────
+' Behavioural Systems
+' ─────────────────────────────────────
+class ReputationSystem {
+    + stats : Dict[str, int]
+    ==
+    + __init__() : None
+    + record_action(action: str,\n   actor: str = "player") : None
+    + aggression_ratio() : float
+    + evil_ratio() : float
+    + summary() : str
+}
+
+note right of ReputationSystem
+  Dimensions tracked:
+  Good | Evil | Aggressive | Defensive
+  Shifts AI heuristic weights at runtime.
+end note
+
+class PatternAnalyzer <<Strategy>> {
+    + {static} WINDOW_SIZE : int = 5
+    ==
+    + {static} frequency_analysis(\n   history: List[str]) : Dict[str, float]
+    + {static} detect_repeating_pattern(\n   history: List[str], window: int = 3) : bool
+    + {static} detect_cyclic_pattern(\n   history: List[str], cycle_length: int = 2) : bool
+    + {static} shannon_entropy(\n   history: List[str]) : float
+    + {static} recency_weighted_distribution(\n   history: List[str]) : Dict[str, float]
+    + {static} predictability_score(\n   history: List[str]) : float
+}
+
+note right of PatternAnalyzer
+  <b>Strategy Pattern</b>
+  All methods are pure static.
+  Plugged into heuristic() optionally.
+  Entropy range: [0.0 .. 2.0]
+  Predictability range: [0.0 .. 1.0]
+end note
+
+class OptimizationMetrics {
+    + nodes_evaluated : int
+    + nodes_pruned : int
+    + nodes_at_depth : Counter
+    ==
+    + __init__() : None
+    + record_node(depth: int,\n   pruned: bool = False) : None
+    + pruning_efficiency() : float
+    + summary() : str
+}
+
+' ─────────────────────────────────────
+' Utility / Functional Modules
+' (module-level functions grouped for clarity)
+' ─────────────────────────────────────
+class SimulationEngine <<Utility>> {
+    ==
+    + {static} can_perform(\n   actor: CombatantState, action: str) : bool
+    + {static} available_actions(\n   actor: CombatantState) : List[str]
+    + {static} simulate_turn(\n   attacker: CombatantState,\n   defender: CombatantState,\n   action: str) : Tuple[CombatantState, CombatantState]
+}
+
+note bottom of SimulationEngine
+  <b>Pure functions — no side effects.</b>
+  simulate_turn() always clones states
+  before applying any mutations.
+  Safe for parallel search-tree exploration.
+end note
+
+class MinimaxEngine <<Utility>> {
+    ==
+    + {static} heuristic(\n   enemy: CombatantState,\n   player: CombatantState,\n   reputation: ReputationSystem,\n   pattern_analyzer: Optional[PatternAnalyzer]) : float
+    + {static} minimax(\n   enemy: CombatantState,\n   player: CombatantState,\n   reputation: ReputationSystem,\n   depth: int, alpha: float, beta: float,\n   maximising: bool,\n   metrics: Optional[OptimizationMetrics],\n   pattern_analyzer: Optional[PatternAnalyzer]) : Tuple[float, Optional[str]]
+    + {static} ai_choose_action(\n   enemy: CombatantState,\n   player: CombatantState,\n   reputation: ReputationSystem,\n   depth: int = 3,\n   metrics: Optional[OptimizationMetrics],\n   pattern_analyzer: Optional[PatternAnalyzer]) : str
+}
+
+note bottom of MinimaxEngine
+  <b>Minimax + Alpha-Beta Pruning</b>
+  Without pruning: O(b^d) = O(4^3) = O(64)
+  With pruning:    O(b^(d/2)) ≈ O(8) avg
+  Recursion stack: O(b·d) = O(12)
+  maximising=True  → Enemy (AI) turn
+  maximising=False → Player turn (simulated)
+end note
+
+class GameOrchestrator <<Utility>> {
+    ==
+    + {static} get_player_action(\n   player: CombatantState) : str
+    + {static} run_combat(\n   player: CombatantState,\n   enemy: CombatantState,\n   reputation: ReputationSystem,\n   player_controlled: bool,\n   minimax_depth: int,\n   track_metrics: bool) : None
+    + {static} main() : None
+}
+
+class Constants <<module>> {
+    + {static} ACTIONS : List[str]
+    + {static} ACTION_STAMINA_COST : Dict[str, int]
+    + {static} ACTION_DAMAGE : Dict[str, int]
+    + {static} REST_RECOVERY : int
+}
+
+' ─────────────────────────────────────
+' Relationships
+' ─────────────────────────────────────
+
+' Composition: CombatantState owns its action_history list
+CombatantState "1" *-right- "0..*" String : action_history >
+
+' GameOrchestrator creates and coordinates everything
+GameOrchestrator ..> CombatantState       : <<creates>>
+GameOrchestrator ..> ReputationSystem     : <<creates>>
+GameOrchestrator ..> PatternAnalyzer      : <<creates>>
+GameOrchestrator ..> OptimizationMetrics  : <<creates (optional)>>
+GameOrchestrator ..> SimulationEngine     : <<delegates>>
+GameOrchestrator ..> MinimaxEngine        : <<delegates>>
+
+' MinimaxEngine uses other components
+MinimaxEngine ..> CombatantState      : reads state
+MinimaxEngine ..> ReputationSystem    : reads ratios
+MinimaxEngine ..> PatternAnalyzer     : <<Strategy>> plugged into heuristic
+MinimaxEngine ..> OptimizationMetrics : records nodes (optional)
+MinimaxEngine ..> SimulationEngine    : simulate_turn() per node
+
+' SimulationEngine operates on state
+SimulationEngine ..> CombatantState : clone() then mutate
+SimulationEngine ..> Constants      : reads DAMAGE,\nSTAMINA_COST
+
+' ReputationSystem/PatternAnalyzer read CombatantState.action_history
+ReputationSystem ..> CombatantState  : reads action (actor param)
+PatternAnalyzer  ..> CombatantState  : reads action_history
+
+@enduml

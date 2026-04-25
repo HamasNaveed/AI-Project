@@ -1,0 +1,160 @@
+@startuml architecture_diagram
+
+skinparam backgroundColor #F8F8F8
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+skinparam package {
+    BackgroundColor #F0F0F8
+    BorderColor #8888CC
+    FontStyle bold
+}
+
+skinparam component {
+    FontSize 11
+    BackgroundColor White
+    BorderColor #666
+}
+
+skinparam ArrowColor #333
+
+skinparam note {
+    BackgroundColor #FFFDE0
+    BorderColor #CCAA00
+    FontSize 10
+}
+
+title
+Dungeon RPG AI - Layered Architecture
+(AI2002 Part B)
+end title
+
+' ===================================================
+' LAYER 1 - Presentation
+' ===================================================
+
+package "Layer 1 - Presentation\n(User Interface & Console I/O)" as L1 #DDEEFF {
+
+    component "main()\nMode Selection and Config" as MAIN
+
+    component "get_player_action()\nConsole Input + Validation" as INPUT
+
+    component "Combat Log Formatter\nprint_header(), divider()\ndescribe_action(), status_line()" as OUTPUT
+}
+
+' ===================================================
+' LAYER 2 - Orchestration
+' ===================================================
+
+package "Layer 2 - Orchestration\n(Game Flow and Turn Management)" as L2 #DDFFD8 {
+
+    component "run_combat()\nManages game loop, alternates turns\nCreates ReputationSystem, PatternAnalyzer\nand OptimizationMetrics (optional)" as COMBAT
+}
+
+' ===================================================
+' LAYER 3 - Decision / AI Intelligence
+' ===================================================
+
+package "Layer 3 - Decision\n(AI Intelligence and Adaptive Heuristics)" as L3 #FFF4D0 {
+
+    component "ai_choose_action()\nMinimax Entry Point\nFallback Guard: returns Rest if None" as SELECTOR
+
+    component "minimax(depth=3, alpha, beta)\nDepth-limited Minimax + Alpha-Beta Pruning\nmaximising=True -> Enemy AI maximises score\nmaximising=False -> Player move simulated\nPruning: beta <= alpha -> skip branch\nComplexity: O(b^d)=O(64) -> O(b^(d/2))~O(8)" as MINIMAX
+
+    component "heuristic()\nHP ratio score x100 (primary)\nStamina ratio score x20\nReputation modifier +-10 (aggression_ratio)\nPattern bonus +15 (repeating), +10 (cyclic)\nLow-stamina penalty -30 (if stamina < 2)" as HEUR
+
+    component "ReputationSystem\nGood/Evil, Aggressive/Defensive\naggression_ratio() -> heuristic modifier\nevil_ratio() -> secondary weight" as REP
+
+    component "PatternAnalyzer" <<Strategy>> as PAT
+
+    note bottom of PAT
+        frequency_analysis()
+        shannon_entropy()
+        detect_repeating_pattern()
+        detect_cyclic_pattern()
+        predictability_score()
+    end note
+
+    component "OptimizationMetrics" <<Observer>> as METRICS
+
+    note bottom of METRICS
+        nodes_evaluated
+        nodes_pruned
+        pruning_efficiency()
+        Optional - only if track_metrics=True
+    end note
+}
+
+' ===================================================
+' LAYER 4 - Simulation (Pure / Side-effect-free)
+' ===================================================
+
+package "Layer 4 - Simulation\n(Game Mechanics - Pure Functions)" as L4 #F0E0FF {
+
+    component "simulate_turn(attacker, defender, action)\nAlways clones both CombatantState objects\nApplies stamina cost, damage, Boss x1.2\nDefend flag halves incoming damage\nSafe for recursive search-tree use" as SIM
+
+    component "can_perform(actor, action)\navailable_actions(actor)\nStamina gate: filters legal moves\nBranching factor b <= 4 (all) or b = 1 (Rest only)" as AVAIL
+}
+
+' ===================================================
+' LAYER 5 - State & Data
+' ===================================================
+
+package "Layer 5 - State\n(Data Model and Constants)" as L5 #E8E8E8 {
+
+    component "CombatantState\nname, hp, max_hp\nstamina, max_stamina, is_boss\ndefending, action_history : List\nclone() -> O(n) deep copy" as CS
+
+    component "Module Constants\nACTIONS = [Attack, Heavy, Defend, Rest]\nACTION_STAMINA_COST : Attack=2, Heavy=4, Defend=1\nACTION_DAMAGE : Attack=15, Heavy=30\nREST_RECOVERY = 3" as CONST
+}
+
+' ===================================================
+' Cross-Layer Flows
+' ===================================================
+
+' L1 <-> L2
+MAIN   -down-> COMBAT : configures mode, depth, track_metrics
+COMBAT -down-> INPUT  : calls on human turn
+COMBAT -up-> OUTPUT   : logs every combat turn
+
+' L2 <-> L3 / L4
+COMBAT -down-> SELECTOR : calls ai_choose_action() each enemy turn
+COMBAT -down-> REP      : calls record_action() each player action
+COMBAT -down-> SIM      : simulate_turn() for player action
+
+' L3 internal
+SELECTOR -down-> MINIMAX : passes depth, alpha=-inf, beta=+inf
+MINIMAX  -right-> HEUR   : calls at each leaf node
+HEUR     -down-> REP     : reads aggression_ratio()
+HEUR     -down-> PAT     : reads predictability_score()
+MINIMAX  -down-> METRICS : calls record_node() when not None
+
+' L3 <-> L4
+MINIMAX -down-> SIM   : simulate_turn() for each candidate action
+MINIMAX -down-> AVAIL : available_actions() to get legal moves
+
+' L4 <-> L5
+SIM   -down-> CS    : clone() then apply action
+SIM   -down-> CONST : reads ACTION_DAMAGE, STAMINA_COST
+AVAIL -down-> CS    : reads actor.stamina
+AVAIL -down-> CONST : reads ACTION_STAMINA_COST
+
+' ===================================================
+' Design Pattern Callouts
+' ===================================================
+
+note right of MINIMAX
+    Alpha-Beta Pruning:
+    Without pruning: O(b^d) = O(4^3) = 64 nodes
+    With pruning: O(b^(d/2)) ~= 8 nodes avg
+    Saves 50–70% of node evaluations.
+end note
+
+note right of SIM
+    Immutable State Pattern:
+    simulate_turn() never mutates originals.
+    Returns new cloned objects.
+    Enables safe recursive tree search
+    without state corruption.
+end note
+
+@enduml
