@@ -838,6 +838,81 @@ def run_combat(player: CombatantState, enemy: CombatantState,
         print(f"  {metrics.summary()}")
     
     divider("═")
+    return player.is_alive()
+
+
+# ─────────────────────────────────────────────
+# Branching Boss Rush
+# ─────────────────────────────────────────────
+def generate_boss(level: int, branch_id: int) -> CombatantState:
+    """Generate a boss with stats scaling by level and varying patterns."""
+    hp = 120 + (level * 30)
+    stamina = 12 + (level * 2)
+    
+    adjectives = ["Fierce", "Venomous", "Shadow", "Crystal", "Infernal", "Abyssal", "Radiant"]
+    nouns = ["Dragon", "Knight", "Wraith", "Golem", "Serpent", "Overlord", "Behemoth"]
+    
+    name = f"{random.choice(adjectives)} {random.choice(nouns)} (L{level+1})"
+    
+    boss = CombatantState(
+        name=name,
+        hp=hp, max_hp=hp,
+        stamina=stamina, max_stamina=stamina,
+        is_boss=True
+    )
+    return boss
+
+
+def run_boss_rush(player: CombatantState, player_controlled: bool, track_metrics: bool):
+    """Execute the branching boss rush mode."""
+    print_header("🔥  BOSS RUSH MODE INITIATED  🔥")
+    
+    level = 0
+    branch_id = 0
+    reputation = ReputationSystem()
+    
+    while True:
+        boss = generate_boss(level, branch_id)
+        print(f"\n>>> Encounter: Level {level+1} Boss - {boss.name} (Path {branch_id}) <<<")
+        
+        # Partially heal player between rounds
+        if level > 0:
+            heal_amt = player.max_hp // 2
+            player.hp = min(player.max_hp, player.hp + heal_amt)
+            player.stamina = player.max_stamina
+            print(f"  Hero recovers {heal_amt} HP. Current HP: {player.hp}/{player.max_hp}")
+        
+        # Increase minimax depth slightly for deeper bosses for more challenge
+        boss_depth = 3 if level < 2 else 4
+        
+        won = run_combat(player, boss, reputation, player_controlled=player_controlled, 
+                         minimax_depth=boss_depth, track_metrics=track_metrics)
+        
+        if not won:
+            print_header(f"💀 Boss Rush ended at Level {level+1} 💀")
+            break
+            
+        print_header(f"🏆 Level {level+1} Cleared! Choose your next path.")
+        print(f"  [1] Path A (Branch {branch_id * 2})")
+        print(f"  [2] Path B (Branch {branch_id * 2 + 1})")
+        
+        if player_controlled:
+            while True:
+                try:
+                    choice = int(input("  Choice (1/2): ").strip())
+                    if choice in (1, 2):
+                        branch_id = branch_id * 2 + (choice - 1)
+                        break
+                except ValueError:
+                    pass
+                print("  Enter 1 or 2.")
+        else:
+            choice = random.choice([1, 2])
+            print(f"  (Auto) Hero chooses Path {choice}")
+            branch_id = branch_id * 2 + (choice - 1)
+            
+        level += 1
+
 
 
 # ─────────────────────────────────────────────
@@ -854,20 +929,33 @@ def main():
     # ── Choose mode ───────────────────────────────────
     print("  Select mode:")
     print("    [1] Play yourself (vs AI Enemy)")
-    print("    [2] Play yourself (vs AI Boss – tougher)")
+    print("    [2] Play yourself (vs Branching Bosses – tougher)")
     print("    [3] Auto-simulation (watch AI vs AI demo)")
     print("    [4] Auto-simulation with metrics tracking")
+    print("    [5] AI Hard Mode: Branching Boss Rush")
     while True:
         try:
             mode = int(input("  Choice: ").strip())
-            if mode in (1, 2, 3, 4):
+            if mode in (1, 2, 3, 4, 5):
                 break
         except ValueError:
             pass
-        print("  Enter 1, 2, 3, or 4.")
+        print("  Enter 1, 2, 3, 4, or 5.")
 
-    is_boss = (mode == 2)
-    player_controlled = (mode in (1, 2))
+    if mode in (2, 5):
+        player_controlled = (mode == 2)
+        track_metrics = (mode == 5)
+        name = "Hero" if player_controlled else "AI Hero"
+        player = CombatantState(
+            name=name,
+            hp=200, max_hp=200,
+            stamina=15, max_stamina=15,
+            is_boss=False,
+        )
+        run_boss_rush(player, player_controlled, track_metrics)
+        return
+
+    player_controlled = (mode == 1)
     track_metrics = (mode == 4)
 
     # ── Build combatants ──────────────────────────────
@@ -878,22 +966,13 @@ def main():
         is_boss=False,
     )
 
-    if is_boss:
-        enemy = CombatantState(
-            name="Dragon Boss",
-            hp=140, max_hp=140,
-            stamina=12, max_stamina=12,
-            is_boss=True,
-        )
-        depth = 3
-    else:
-        enemy = CombatantState(
-            name="Dark Knight",
-            hp=100, max_hp=100,
-            stamina=10, max_stamina=10,
-            is_boss=False,
-        )
-        depth = 3
+    enemy = CombatantState(
+        name="Dark Knight",
+        hp=100, max_hp=100,
+        stamina=10, max_stamina=10,
+        is_boss=False,
+    )
+    depth = 3
 
     reputation = ReputationSystem()
 
