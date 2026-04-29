@@ -35,7 +35,7 @@ end title
 
 package "Layer 1 - Presentation\n(User Interface & Console I/O)" as L1 #DDEEFF {
 
-    component "main()\nMode Selection and Config" as MAIN
+    component "main()\nMode Selection — 5 modes:\n1=Play  2=Boss Rush  3=Auto\n4=Metrics  5=AI Boss Rush" as MAIN
 
     component "get_player_action()\nConsole Input + Validation" as INPUT
 
@@ -48,7 +48,11 @@ package "Layer 1 - Presentation\n(User Interface & Console I/O)" as L1 #DDEEFF {
 
 package "Layer 2 - Orchestration\n(Game Flow and Turn Management)" as L2 #DDFFD8 {
 
-    component "run_combat()\nManages game loop, alternates turns\nCreates ReputationSystem, PatternAnalyzer\nand OptimizationMetrics (optional)" as COMBAT
+    component "run_combat() : bool\nManages game loop, alternates turns\nCreates ReputationSystem, PatternAnalyzer\nand OptimizationMetrics (optional)\nReturns True=player won, False=player lost" as COMBAT
+
+    component "run_boss_rush(player, player_controlled, track_metrics)\nBinary-tree branching boss loop\nCalls generate_boss() per level\nPartially heals player between rounds\nDepth=4 Minimax for level >= 2" as BOSSRUSH
+
+    component "generate_boss(level, branch_id) : CombatantState\nHP = 120 + level*30, ST = 12 + level*2\nRandom adjective+noun name with is_boss=True" as GENB
 }
 
 ' ===================================================
@@ -61,7 +65,7 @@ package "Layer 3 - Decision\n(AI Intelligence and Adaptive Heuristics)" as L3 #F
 
     component "minimax(depth=3, alpha, beta)\nDepth-limited Minimax + Alpha-Beta Pruning\nmaximising=True -> Enemy AI maximises score\nmaximising=False -> Player move simulated\nPruning: beta <= alpha -> skip branch\nComplexity: O(b^d)=O(64) -> O(b^(d/2))~O(8)" as MINIMAX
 
-    component "heuristic()\nHP ratio score x100 (primary)\nStamina ratio score x20\nReputation modifier +-10 (aggression_ratio)\nPattern bonus +15 (repeating), +10 (cyclic)\nLow-stamina penalty -30 (if stamina < 2)" as HEUR
+    component "heuristic()\nHP ratio score x100 (primary)\nStamina ratio score x20\nReputation modifier {+10/−5 or −10/+5} (aggression_ratio)\nPattern bonus +15 (repeating), +10×predictability (cyclic)\n+5 if predictability > 0.7\nLow-stamina penalty -30 (if stamina < 2)" as HEUR
 
     component "ReputationSystem\nGood/Evil, Aggressive/Defensive\naggression_ratio() -> heuristic modifier\nevil_ratio() -> secondary weight" as REP
 
@@ -112,9 +116,12 @@ package "Layer 5 - State\n(Data Model and Constants)" as L5 #E8E8E8 {
 ' ===================================================
 
 ' L1 <-> L2
-MAIN   -down-> COMBAT : configures mode, depth, track_metrics
-COMBAT -down-> INPUT  : calls on human turn
-COMBAT -up-> OUTPUT   : logs every combat turn
+MAIN      -down-> COMBAT    : modes 1,3,4 — single combat
+MAIN      -down-> BOSSRUSH  : modes 2,5 — boss rush loop
+BOSSRUSH  -down-> GENB      : generate_boss() each level
+BOSSRUSH  -down-> COMBAT    : run_combat() per level, reads bool result
+COMBAT    -down-> INPUT     : calls on human turn
+COMBAT    -up->   OUTPUT    : logs every combat turn
 
 ' L2 <-> L3 / L4
 COMBAT -down-> SELECTOR : calls ai_choose_action() each enemy turn

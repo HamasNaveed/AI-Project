@@ -126,9 +126,21 @@ end note
 class GameOrchestrator <<Utility>> {
     ==
     + {static} get_player_action(\n   player: CombatantState) : str
-    + {static} run_combat(\n   player: CombatantState,\n   enemy: CombatantState,\n   reputation: ReputationSystem,\n   player_controlled: bool,\n   minimax_depth: int,\n   track_metrics: bool) : None
+    + {static} run_combat(\n   player: CombatantState,\n   enemy: CombatantState,\n   reputation: ReputationSystem,\n   player_controlled: bool,\n   minimax_depth: int,\n   track_metrics: bool) : bool
+    + {static} generate_boss(\n   level: int,\n   branch_id: int) : CombatantState
+    + {static} run_boss_rush(\n   player: CombatantState,\n   player_controlled: bool,\n   track_metrics: bool) : None
     + {static} main() : None
 }
+
+note right of GameOrchestrator
+  run_combat() returns bool:
+  True  = player survived (victory)
+  False = player died (defeat)
+  generate_boss() scales HP/stamina
+  by level; random adjective+noun name.
+  run_boss_rush() loops levels, branches
+  as a binary tree (path A / path B).
+end note
 
 class Constants <<module>> {
     + {static} ACTIONS : List[str]

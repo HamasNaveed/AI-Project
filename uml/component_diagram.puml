@@ -29,9 +29,10 @@ title "Dungeon RPG AI — Component / Package Diagram\n(AI2002 Part B)"
 package "dungeon_rpg_ai_enhanced.py" as APP {
 
     package "Presentation & Orchestration" as PRES_PKG #E8F4FF {
-        component [Game Entry Point\nmain()] as MAIN
+        component [Game Entry Point\nmain()\n5 modes: Play / Boss Rush / Auto / Metrics] as MAIN
         component [Player Input Handler\nget_player_action()] as INPUT
-        component [Combat Loop Manager\nrun_combat()] as COMBAT
+        component [Combat Loop Manager\nrun_combat() : bool] as COMBAT
+        component [Boss Rush Controller\nrun_boss_rush()\ngenerate_boss()] as BOSSRUSH
         component [Output Formatter\nprint_header()\ndescribe_action()\ndivider()] as OUTPUT
     }
 
@@ -72,9 +73,10 @@ package "Python Standard Library" as STDLIB {
 ' Test Module
 ' ─────────────────────────────────────────────────
 package "test_dungeon_rpg.py" as TEST_PKG #F8F8FF {
-    component [Unit Tests\nunittest.TestCase\n×8 test classes] as TESTS
+    component [Unit Tests\nunittest.TestCase] as TESTS
     component [Integration Tests\nTestIntegration] as ITESTS
     component [Performance Tests\nTestPerformance] as PTESTS
+    component [Boss Tests\nTestBossGeneration\nTestBossRush] as BOSSTESTS
 }
 
 ' ─────────────────────────────────────────────────
@@ -82,11 +84,13 @@ package "test_dungeon_rpg.py" as TEST_PKG #F8F8FF {
 ' ─────────────────────────────────────────────────
 
 ' Orchestration flows
-MAIN    --> COMBAT  : launches with\nCombatantState + config
-COMBAT  --> INPUT   : calls on human turn
-COMBAT  --> OUTPUT  : logs each action
-COMBAT  --> SELECTOR : requests AI action
-COMBAT  --> SIM     : applies player action
+MAIN      --> COMBAT    : modes 1,3,4 — single combat
+MAIN      --> BOSSRUSH  : modes 2,5 — boss rush loop
+BOSSRUSH  --> COMBAT    : calls run_combat() per level\nreturns bool (won?)
+COMBAT    --> INPUT     : calls on human turn
+COMBAT    --> OUTPUT    : logs each action
+COMBAT    --> SELECTOR  : requests AI action
+COMBAT    --> SIM       : applies player action
 
 ' AI Decision chain
 SELECTOR --> MINIMAX  : calls with depth, α, β
@@ -120,9 +124,10 @@ COMBAT ..> RAND  : random.choices() for auto-sim
 APP    ..> TYPING : type annotations throughout
 
 ' Test dependencies
-TESTS  ..> APP : imports all public symbols
-ITESTS ..> RAND : random.choice() in simulation
-PTESTS ..> MINIMAX : benchmarks depth=3 search
+TESTS     ..> APP    : imports all public symbols
+ITESTS    ..> RAND   : random.choice() in simulation
+PTESTS    ..> MINIMAX: benchmarks depth=3 search
+BOSSTESTS ..> BOSSRUSH : tests generate_boss()\nand run_boss_rush() auto-sim
 
 note bottom of PAT
   <b>Strategy Pattern</b>

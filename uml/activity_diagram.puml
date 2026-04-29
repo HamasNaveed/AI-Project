@@ -23,7 +23,37 @@ title "Dungeon RPG AI — Activity Diagram\nCombat Flow + Minimax Alpha-Beta Sea
 |Game Orchestration|
 start
 
-:Initialize CombatantState (Player, Enemy);
+:main() — print header and stamina rules;
+:Prompt mode selection (1–5);
+
+if (mode 2 or 5?\n(Boss Rush)) then (yes)
+    :player_controlled = (mode == 2)\ntrack_metrics = (mode == 5);
+    :Create Hero CombatantState\n(HP=200, ST=15);
+    :run_boss_rush(player, player_controlled, track_metrics);
+    note right
+        Branching Boss Rush:
+        Loops levels; each win branches
+        into Path A or Path B (binary tree).
+        Boss HP/ST scales with level.
+        Deeper bosses use depth=4 Minimax.
+    end note
+    stop
+endif
+
+:player_controlled = (mode == 1)\ntrack_metrics = (mode == 4);
+:Create Hero (HP=100, ST=10)\nand Dark Knight (HP=100, ST=10);
+:Create ReputationSystem;
+:run_combat(player, enemy, reputation, ...);
+
+note right
+  Modes 1–4 run a single combat.
+  Boss Rush (2 & 5) loops run_combat
+  repeatedly inside run_boss_rush().
+end note
+
+' ─────────────────────────────────────
+' run_combat() internals
+' ─────────────────────────────────────
 :Initialize ReputationSystem;
 :Initialize PatternAnalyzer;
 
@@ -85,12 +115,15 @@ while (player.is_alive() AND enemy.is_alive()) is (yes)
                 |Heuristic Evaluation|
                 :Compute hp_score:\n(enemy.hp/max_hp − player.hp/max_hp) × 100;
                 :Compute st_score:\n(enemy.stamina/max − player.stamina/max) × 20;
-                :reputation.aggression_ratio() → rep_modifier (±10);
+                :reputation.aggression_ratio() → rep_modifier\n  aggr > 0.6: defending=+10, else=−5\n  aggr ≤ 0.6: defending=−10, else=+5;
 
                 if (PatternAnalyzer provided AND history ≥ 3?) then (yes)
                     :detect_repeating_pattern(last 3) → +15.0 bonus;
-                    :predictability_score() → entropy-based bonus;
-                    :detect_cyclic_pattern() → +10 × predictability;
+                    :predictability_score() → compute entropy-based score;
+                    :detect_cyclic_pattern() → +10.0 × predictability_score;
+                    if (predictability_score > 0.7?) then (yes)
+                        :+5.0 high-predictability bonus;
+                    endif
                 else (no)
                     :Simple repeating pattern check only;
                 endif
@@ -189,6 +222,8 @@ endif
 if (track_metrics?) then (yes)
     :Print OptimizationMetrics.summary()\n(nodes evaluated, pruned, efficiency %, depth distribution);
 endif
+
+:return player.is_alive() — bool;
 
 stop
 
