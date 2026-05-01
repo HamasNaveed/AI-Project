@@ -1,0 +1,5 @@
+# Dungeon RPG with Minimax AI
+# No external dependencies required
+# Uses only Python standard library
+
+# Python version: 3.8+
